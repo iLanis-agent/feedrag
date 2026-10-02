@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FeeDrag - what are your fund fees really costing?</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; background:#14212b; color:#e8f0f5; line-height:1.5; }
+  .wrap { max-width:720px; margin:0 auto; padding:26px 16px 50px; }
+  h1 { font-size:28px; } h1 span { color:#ff7a6b; }
+  .sub { color:#9fb3c0; margin:6px 0 16px; }
+  .card { background:#1d3140; border-radius:14px; padding:14px; margin-bottom:12px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }
+  label { font-size:12px; color:#9fb3c0; display:block; margin-bottom:3px; }
+  input { width:100%; background:#14212b; color:#e8f0f5; border:1px solid #3a5568; border-radius:8px; padding:8px; font-size:15px; font-family:inherit; }
+  button { background:#2f4a5d; color:#e8f0f5; border:0; padding:8px 14px; border-radius:8px; cursor:pointer; font-size:14px; margin-right:6px; margin-top:10px; }
+  .fees { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .fc { border-radius:12px; padding:12px; background:#14212b; border-top:4px solid var(--c); } .fc b { display:block; font-size:22px; } .fc .l { color:var(--c); font-weight:700; font-size:13px; }
+  .fc .m { color:#9fb3c0; font-size:12.5px; } .loss { color:#ff7a6b; font-weight:700; }
+  svg { width:100%; height:auto; display:block; } .verdict { font-size:18px; font-weight:700; margin-bottom:10px; }
+  .err { color:#ff9c8a; } .note { font-size:12.5px; color:#778d9b; margin-top:6px; }
+  @media (max-width:560px) { .fees { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Fee<span>Drag</span></h1>
+  <div class="sub">A fee of 1% sounds small. See what it takes from your balance over the years, next to cheaper options.</div>
+  <div class="card">
+    <div class="grid"><div><label>Starting balance $</label><input id="st" value="100000" inputmode="decimal"></div><div><label>Added each year $</label><input id="ct" value="0" inputmode="decimal"></div><div><label>Years</label><input id="yr" value="20" inputmode="numeric"></div><div><label>Return before fees %/yr</label><input id="rt" value="4" inputmode="decimal"></div></div>
+    <div class="grid" style="margin-top:10px"><div><label>Fee A %/yr</label><input id="f1" value="0.25" inputmode="decimal"></div><div><label>Fee B %/yr</label><input id="f2" value="0.5" inputmode="decimal"></div><div><label>Fee C %/yr</label><input id="f3" value="1" inputmode="decimal"></div></div>
+    <button id="e1">SEC example</button><button id="e2">Index fund vs advisor</button>
+  </div>
+  <div class="card" id="out"></div>
+  <div class="note">Each year: balance = (balance + added) x (1 + return) x (1 - fee). The SEC Investor Bulletin example ($100,000, 4% a year, 20 years) gives about $208,000, $198,000 and $179,000 for 0.25%, 0.50% and 1.00%. Returns are a constant assumption, not a forecast, and real fees can include trading costs and taxes that are not modeled. Runs in your browser, nothing stored.</div>
+</div>
+<script src="engine.js"></script>
+<script>
+(function () {
+  var F = window.FeeDrag, $ = function (i) { return document.getElementById(i); }, COL = ['#6ee7c8', '#f2b84b', '#ff7a6b'];
+  function m(x) { return '$' + Math.round(x).toLocaleString('en-US'); }
+  function render() {
+    var fees = [$('f1').value, $('f2').value, $('f3').value].map(parseFloat);
+    if (fees.some(function (x) { return !isFinite(x); })) { $('out').innerHTML = '<div class="err">Enter all three fees (0 is fine).</div>'; return; }
+    var c = F.compare(parseFloat($('st').value), parseFloat($('ct').value || 0), parseFloat($('yr').value), parseFloat($('rt').value), fees);
+    if (!c) { $('out').innerHTML = '<div class="err">Check the inputs: balance or yearly amount above 0, years 1 to 80, fees under 100%.</div>'; return; }
+    var w = c.rows[2], yrs = Math.round(parseFloat($('yr').value));
+    var html = '<div class="verdict">A ' + fees[2] + '% fee costs <span class="loss">' + m(w.lost) + '</span> over ' + yrs + ' years: ' + w.lostPct.toFixed(1) + '% of your final balance and ' + w.gainLostPct.toFixed(0) + '% of your gains.</div>';
+    html += '<div class="fees">' + c.rows.map(function (r, i) { return '<div class="fc" style="--c:' + COL[i] + '"><div class="l">Fee ' + 'ABC'[i] + ': ' + r.fee + '%</div><b>' + m(r.final) + '</b><div class="m">Net return ' + r.netReturn.toFixed(2) + '%/yr</div><div class="m">Costs <span class="loss">' + m(r.lost) + '</span> vs no fee</div></div>'; }).join('') + '</div>';
+    var all = [{ s: c.base.series, c: '#8da2b0', d: '4 4' }].concat(c.rows.map(function (r, i) { return { s: r.series, c: COL[i] }; }));
+    var max = Math.max.apply(null, c.base.series), W = 640, H = 220, P = 6;
+    html += '<svg viewBox="0 0 ' + W + ' ' + (H + 22) + '" role="img" aria-label="Balance over time by fee">' + all.map(function (l) { return '<polyline fill="none" stroke="' + l.c + '" stroke-width="2.5"' + (l.d ? ' stroke-dasharray="' + l.d + '"' : '') + ' points="' + l.s.map(function (v, k) { return (P + k / (l.s.length - 1) * (W - 2 * P)).toFixed(1) + ',' + (H - v / max * (H - 10)).toFixed(1); }).join(' ') + '"/>'; }).join('') +
+      '<text x="' + P + '" y="' + (H + 16) + '" fill="#778d9b" font-size="12">Year 0</text><text x="' + (W - P) + '" y="' + (H + 16) + '" fill="#778d9b" font-size="12" text-anchor="end">Year ' + yrs + ' - dashed = no fee, ' + m(c.base.final) + '</text></svg>';
+    $('out').innerHTML = html;
+  }
+  function set(a) { ['st', 'ct', 'yr', 'rt', 'f1', 'f2', 'f3'].forEach(function (id, i) { $(id).value = a[i]; }); render(); }
+  document.addEventListener('input', render);
+  $('e1').onclick = function () { set([100000, 0, 20, 4, 0.25, 0.5, 1]); };
+  $('e2').onclick = function () { set([25000, 6000, 30, 7, 0.05, 0.5, 1.25]); };
+  render();
+})();
+</script>
+</body>
+</html>
